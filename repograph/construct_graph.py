@@ -31,6 +31,10 @@ from tree_sitter_languages import get_language, get_parser
 
 Tag = namedtuple("Tag", "rel_fname fname line name kind category info".split())
 
+DIR_NAME = "/data/lowcode_public/DevEval_zxl/Source_Code/System/mrjob/mrjob"
+GRAPH_PATH = "/data/zxl/Search2026/outputData/devEvalRepoGraph/mrjob/graph.pkl"
+TAGS_PATH = "/data/zxl/Search2026/outputData/devEvalRepoGraph/mrjob/tags.json"
+
 
 class CodeGraph:
 
@@ -96,20 +100,23 @@ class CodeGraph:
         
         G = nx.MultiDiGraph()
         for tag in tags:
-            G.add_node(tag['name'], category=tag['category'], info=tag['info'], fname=tag['fname'], line=tag['line'], kind=tag['kind'])
+            G.add_node(tag.name, category=tag.category, info=tag.info, fname=tag.fname, line=tag.line, kind=tag.kind)
+            # G.add_node(tag['name'], category=tag['category'], info=tag['info'], fname=tag['fname'], line=tag['line'], kind=tag['kind'])
 
         for tag in tags:
-            if tag['category'] == 'class':
-                class_funcs = tag['info'].split('\t')
+            if tag.category == 'class':
+                # `tag.info` is stored as method names joined by newlines.
+                # Be robust to either '\n' or '\t' separators.
+                class_funcs = [s.strip() for s in re.split(r"[\t\n]+", tag.info or "") if s.strip()]
                 for f in class_funcs:
-                    G.add_edge(tag['name'], f.strip())
+                    G.add_edge(tag.name, f)
 
-        tags_ref = [tag for tag in tags if tag['kind'] == 'ref']
-        tags_def = [tag for tag in tags if tag['kind'] == 'def']
+        tags_ref = [tag for tag in tags if tag.kind == 'ref']
+        tags_def = [tag for tag in tags if tag.kind == 'def']
         for tag in tags_ref:
             for tag_def in tags_def:
-                if tag['name'] == tag_def['name']:
-                    G.add_edge(tag['name'], tag_def['name'])
+                if tag.name == tag_def.name:
+                    G.add_edge(tag.name, tag_def.name)
         return G
 
     def get_rel_fname(self, fname):
@@ -172,7 +179,9 @@ class CodeGraph:
                             continue
                         std_libs.append(alias.name)
                         eval_name = alias.name if alias.asname is None else alias.asname
-                        std_funcs.extend([name for name, member in inspect.getmembers(eval(eval_name)) if callable(member)])
+                        # std_funcs.extend([name for name, member in inspect.getmembers(eval(eval_name)) if callable(member)])
+                        std_funcs.extend(
+                            [name for name, member in inspect.getmembers(eval(eval_name)) if callable(member)])
 
             if isinstance(node, ast.ImportFrom):
                 # execute the import statement
@@ -214,10 +223,40 @@ class CodeGraph:
         return data
 
     def get_tags_raw(self, fname, rel_fname):
-        ref_fname_lst = rel_fname.split('/')
-        s = deepcopy(self.structure)
-        for fname_part in ref_fname_lst:
-            s = s[fname_part]
+        # `create_structure()` builds a nested dict keyed by path parts, but its
+        # root may either be the repo_name or the first subdirectory, depending
+        # on how the structure was constructed. Be robust: try multiple roots and
+        # skip files we cannot locate instead of crashing the whole build.
+        ref_fname_lst = [p for p in rel_fname.split('/') if p]
+
+        def _walk(cur, parts):
+            for part in parts:
+                cur = cur[part]
+            return cur
+
+        s = None
+        # Try direct lookup (structure keyed from repo root)
+        try:
+            s = _walk(self.structure, ref_fname_lst)
+        except Exception:
+            pass
+        # Try lookup under repo-name key (structure keyed with repo_name at root)
+        if s is None:
+            repo_key = os.path.basename(self.root.rstrip(os.sep))
+            try:
+                s = _walk(self.structure, [repo_key] + ref_fname_lst)
+            except Exception:
+                s = None
+        # Try lookup under "only-child" key (some custom structure layouts)
+        if s is None and len(self.structure) == 1:
+            only_key = next(iter(self.structure))
+            try:
+                s = _walk(self.structure, [only_key] + ref_fname_lst)
+            except Exception:
+                s = None
+
+        if not isinstance(s, dict) or "classes" not in s or "functions" not in s:
+            return
         structure_classes = {item['name']: item for item in s['classes']}
         structure_functions = {item['name']: item for item in s['functions']}
         structure_class_methods = dict()
@@ -328,34 +367,41 @@ class CodeGraph:
                 continue
 
             if category == 'class':
-                # try:
-                #     class_functions = self.get_class_functions(tree_ast, tag_name)
-                # except:
-                #     class_functions = "None"
-                class_functions = [item['name'] for item in structure_classes[tag_name]['methods']]
-                if kind == 'def':
-                    line_nums = [structure_classes[tag_name]['start_line'], structure_classes[tag_name]['end_line']]
+                # Only use structure_classes when this class is defined in current file
+                # (refs to classes from other files are not in structure_classes)
+                if tag_name in structure_classes:
+                    class_functions = [item['name'] for item in structure_classes[tag_name]['methods']]
+                    if kind == 'def':
+                        line_nums = [structure_classes[tag_name]['start_line'], structure_classes[tag_name]['end_line']]
+                    else:
+                        # tree-sitter uses 0-based line numbers; convert to 1-based for display
+                        line_nums = [node.start_point[0] + 1, node.end_point[0] + 1]
+                    info = '\n'.join(class_functions)
                 else:
-                    line_nums = [node.start_point[0], node.end_point[0]]
+                    class_functions = []
+                    # tree-sitter uses 0-based line numbers; convert to 1-based for display
+                    line_nums = [node.start_point[0] + 1, node.end_point[0] + 1]
+                    info = ''
                 result = Tag(
                     rel_fname=rel_fname,
                     fname=fname,
                     name=tag_name,
                     kind=kind,
                     category=category,
-                    info='\n'.join(class_functions), # list unhashable, use string instead
+                    info=info,
                     line=line_nums,
                 )
 
             elif category == 'function':
-
                 if kind == 'def':
-                    # func_block = self.get_func_block(cur_cdl, code)
-                    # cur_cdl =func_block
+                    if tag_name not in structure_all_funcs:
+                        continue  # defined in another file, skip
                     cur_cdl = '\n'.join(structure_all_funcs[tag_name]['text'])
                     line_nums = [structure_all_funcs[tag_name]['start_line'], structure_all_funcs[tag_name]['end_line']]
                 else:
-                    line_nums = [node.start_point[0], node.end_point[0]]
+                    # tree-sitter uses 0-based line numbers; convert to 1-based for display
+                    line_nums = [node.start_point[0] + 1, node.end_point[0] + 1]
+                    cur_cdl = 'none' if tag_name not in structure_all_funcs else '\n'.join(structure_all_funcs[tag_name]['text'])
 
                 result = Tag(
                     rel_fname=rel_fname,
@@ -561,24 +607,28 @@ def get_random_color():
 
 if __name__ == "__main__":
 
-    dir_name = sys.argv[1]
+    # dir_name = sys.argv[1]
     # dir_name = "./playground/astropy"
-    code_graph = CodeGraph(root=dir_name)
-    chat_fnames_new = code_graph.find_files([dir_name])
+    code_graph = CodeGraph(root=DIR_NAME)
+    chat_fnames_new = code_graph.find_files([DIR_NAME])
 
     tags, G = code_graph.get_code_graph(chat_fnames_new)
 
     print("---------------------------------")
-    print(f"🏅 Successfully constructed the code graph for repo directory {dir_name}")
+    print(f"🏅 Successfully constructed the code graph for repo directory {GRAPH_PATH}")
     print(f"   Number of nodes: {len(G.nodes)}")
     print(f"   Number of edges: {len(G.edges)}")
     print("---------------------------------")
 
-    with open(f'{os.getcwd()}/graph.pkl', 'wb') as f:
+    with open(GRAPH_PATH, 'wb') as f:
         pickle.dump(G, f)
     
+    # 先把TAGS_PATH清空
+    with open(TAGS_PATH, 'w') as f:
+        pass
+
     for tag in tags:
-        with open(f'{os.getcwd()}/tags.json', 'a+') as f:
+        with open(TAGS_PATH, 'a+') as f:
             line = json.dumps({
                 "fname": tag.fname,
                 'rel_fname': tag.rel_fname,
@@ -589,4 +639,4 @@ if __name__ == "__main__":
                 'info': tag.info,
             })
             f.write(line+'\n')
-    print(f"🏅 Successfully cached code graph and node tags in directory ''{os.getcwd()}''")
+    print(f"🏅 Successfully cached code graph and node tags in {TAGS_PATH}")
