@@ -29,7 +29,7 @@ from utils import create_structure
 warnings.simplefilter("ignore", category=FutureWarning)
 from tree_sitter_languages import get_language, get_parser
 
-Tag = namedtuple("Tag", "rel_fname fname line name kind category info".split())
+Tag = namedtuple("Tag", "rel_fname fname line name qualified_name kind category info".split())
 
 DIR_NAME = "/data/lowcode_public/DevEval_zxl/Source_Code/System/mrjob/mrjob"
 GRAPH_PATH = "/data/zxl/Search2026/outputData/devEvalRepoGraph/mrjob/graph.pkl"
@@ -100,7 +100,16 @@ class CodeGraph:
         
         G = nx.MultiDiGraph()
         for tag in tags:
-            G.add_node(tag.name, category=tag.category, info=tag.info, fname=tag.fname, line=tag.line, kind=tag.kind)
+            G.add_node(
+                tag.name,
+                category=tag.category,
+                info=tag.info,
+                fname=tag.fname,
+                rel_fname=tag.rel_fname,
+                line=tag.line,
+                kind=tag.kind,
+                qualified_name=tag.qualified_name,
+            )
             # G.add_node(tag['name'], category=tag['category'], info=tag['info'], fname=tag['fname'], line=tag['line'], kind=tag['kind'])
 
         for tag in tags:
@@ -325,6 +334,63 @@ class CodeGraph:
         except:
             tree_ast = None
 
+        def _module_qual_name(root_dir: str, rel_path: str) -> str:
+            """
+            Build python module qualified prefix from repo root + file rel path.
+            Example:
+              root_dir=/.../mrjob/mrjob
+              rel_path=tools/spark_submit.py
+              -> mrjob.tools.spark_submit
+            """
+            base_pkg = os.path.basename(root_dir.rstrip(os.sep))
+            rel_no_ext = rel_path[:-3] if rel_path.endswith(".py") else rel_path
+            mod = rel_no_ext.replace(os.sep, ".").replace("/", ".")
+            if mod.endswith(".__init__"):
+                mod = mod[: -len(".__init__")]
+            if not mod:
+                return base_pkg
+            return f"{base_pkg}.{mod}"
+
+        module_prefix = _module_qual_name(self.root, rel_fname)
+
+        def _build_qname_map(py_ast, module_prefix_: str):
+            """
+            Return mapping from (node_type, name, lineno) -> qualified_name.
+            Qualified name format:
+              <module_prefix>.<OuterClass>.<InnerClass>.<func>...
+            """
+            qmap = {}
+
+            def visit(body, stack):
+                for n in body or []:
+                    if isinstance(n, ast.ClassDef):
+                        qname = f"{module_prefix_}." + ".".join(stack + [n.name])
+                        qmap[("ClassDef", n.name, getattr(n, "lineno", None))] = qname
+                        visit(getattr(n, "body", None), stack + [n.name])
+                    elif isinstance(n, ast.FunctionDef):
+                        qname = f"{module_prefix_}." + ".".join(stack + [n.name])
+                        qmap[("FunctionDef", n.name, getattr(n, "lineno", None))] = qname
+                        visit(getattr(n, "body", None), stack + [n.name])
+                    elif isinstance(n, ast.AsyncFunctionDef):
+                        qname = f"{module_prefix_}." + ".".join(stack + [n.name])
+                        qmap[("AsyncFunctionDef", n.name, getattr(n, "lineno", None))] = qname
+                        visit(getattr(n, "body", None), stack + [n.name])
+                    else:
+                        # still traverse into nested blocks that can contain defs
+                        for field in ("body", "orelse", "finalbody"):
+                            sub = getattr(n, field, None)
+                            if isinstance(sub, list) and sub:
+                                visit(sub, stack)
+                        handlers = getattr(n, "handlers", None)
+                        if isinstance(handlers, list) and handlers:
+                            for h in handlers:
+                                visit(getattr(h, "body", None), stack)
+
+            visit(getattr(py_ast, "body", None), [])
+            return qmap
+
+        qname_map = _build_qname_map(tree_ast, module_prefix) if tree_ast is not None else {}
+
         # functions from third-party libs or default libs
         try:
             std_funcs, std_libs = self.std_proj_funcs(code, fname)
@@ -357,6 +423,7 @@ class CodeGraph:
             cur_cdl = codelines[node.start_point[0]]
             category = 'class' if 'class ' in cur_cdl else 'function'
             tag_name = node.text.decode("utf-8")
+            start_line_1b = node.start_point[0] + 1
             
             #  we only want to consider project-dependent functions
             if tag_name in std_funcs:
@@ -382,10 +449,15 @@ class CodeGraph:
                     # tree-sitter uses 0-based line numbers; convert to 1-based for display
                     line_nums = [node.start_point[0] + 1, node.end_point[0] + 1]
                     info = ''
+                if kind == "def":
+                    qualified_name = qname_map.get(("ClassDef", tag_name, start_line_1b)) or f"{module_prefix}.{tag_name}"
+                else:
+                    qualified_name = f"{module_prefix}.{tag_name}"
                 result = Tag(
                     rel_fname=rel_fname,
                     fname=fname,
                     name=tag_name,
+                    qualified_name=qualified_name,
                     kind=kind,
                     category=category,
                     info=info,
@@ -398,15 +470,22 @@ class CodeGraph:
                         continue  # defined in another file, skip
                     cur_cdl = '\n'.join(structure_all_funcs[tag_name]['text'])
                     line_nums = [structure_all_funcs[tag_name]['start_line'], structure_all_funcs[tag_name]['end_line']]
+                    qualified_name = (
+                        qname_map.get(("FunctionDef", tag_name, start_line_1b))
+                        or qname_map.get(("AsyncFunctionDef", tag_name, start_line_1b))
+                        or f"{module_prefix}.{tag_name}"
+                    )
                 else:
                     # tree-sitter uses 0-based line numbers; convert to 1-based for display
                     line_nums = [node.start_point[0] + 1, node.end_point[0] + 1]
                     cur_cdl = 'none' if tag_name not in structure_all_funcs else '\n'.join(structure_all_funcs[tag_name]['text'])
+                    qualified_name = f"{module_prefix}.{tag_name}"
 
                 result = Tag(
                     rel_fname=rel_fname,
                     fname=fname,
                     name=tag_name,
+                    qualified_name=qualified_name,
                     kind=kind,
                     category=category,
                     info=cur_cdl,
@@ -440,6 +519,7 @@ class CodeGraph:
                 kind="ref",
                 line=-1,
                 category='function',
+                qualified_name=f"{module_prefix}.{token}",
                 info='none',
             )
 
@@ -634,6 +714,7 @@ if __name__ == "__main__":
                 'rel_fname': tag.rel_fname,
                 'line': tag.line,
                 'name': tag.name,
+                'qualified_name': tag.qualified_name,
                 'kind': tag.kind,
                 'category': tag.category,
                 'info': tag.info,
