@@ -55,6 +55,30 @@ def _normalize_symbol(s: str) -> str:
     return s
 
 
+def is_method_hit(method_signature: str, method_code: str, deps_list: list[str]) -> bool:
+    """判断某个检索到的方法是否命中依赖集合（带 ENRE 放宽规则）。"""
+    norm_sig = _normalize_symbol(method_signature).replace(".__init__", "")
+    for x in deps_list:
+        if x == norm_sig:
+            return True
+        if x in variables_enre:
+            var_name = x.split(".")[-1]
+            if var_name and var_name in (method_code or ""):
+                return True
+        if x in unresolved_attribute_enre:
+            attr_name = x.split(".")[-1]
+            class_name = ".".join(x.split(".")[:-1])
+            if norm_sig.startswith(f"{class_name}.") and f"self.{attr_name}" in (method_code or ""):
+                return True
+        if x in module_enre:
+            if norm_sig.startswith(x):
+                return True
+        if x in package_enre:
+            if norm_sig.startswith(x):
+                return True
+    return False
+
+
 def compute_task_recall(
     dependency: Optional[list[str]],
     searched_context_code_list: list[Dict[str, Any]],

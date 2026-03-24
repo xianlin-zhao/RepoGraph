@@ -23,7 +23,7 @@ import ast
 import pickle
 import json
 from copy import deepcopy
-from utils import create_structure
+from graph_utils import create_structure
 
 # tree_sitter is throwing a FutureWarning
 warnings.simplefilter("ignore", category=FutureWarning)
@@ -31,9 +31,9 @@ from tree_sitter_languages import get_language, get_parser
 
 Tag = namedtuple("Tag", "rel_fname fname line name qualified_name kind category info".split())
 
-DIR_NAME = "/data/lowcode_public/DevEval_zxl/Source_Code/System/mrjob/mrjob"
-GRAPH_PATH = "/data/zxl/Search2026/outputData/devEvalRepoGraph/mrjob/graph.pkl"
-TAGS_PATH = "/data/zxl/Search2026/outputData/devEvalRepoGraph/mrjob/tags.json"
+DIR_NAME = "/data/lowcode_public/DevEval_zxl/Source_Code/Database/alembic/alembic"
+GRAPH_PATH = "/data/zxl/Search2026/outputData/devEvalRepoGraph/alembic/graph.pkl"
+TAGS_PATH = "/data/zxl/Search2026/outputData/devEvalRepoGraph/alembic/tags.json"
 
 
 class CodeGraph:

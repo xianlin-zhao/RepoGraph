@@ -23,20 +23,14 @@ def resolve_signature(
     return abs_file, signature
 
 
-def get_class_skeleton(project_path, file_path, class_qname):
+def get_class_skeleton(file_path, class_qname):
     """
     Extract only the "skeleton" of a class from a file:
     - Full class definition line and __init__ (to preserve self.xx member variables).
     - Other methods: only the function signature, body replaced by "...".
     This shortens the text for embedding.
     """
-    full_path = os.path.join(project_path, file_path.lstrip('/'))
-    if not os.path.exists(full_path):
-        if os.path.exists(file_path):
-            full_path = file_path
-        else:
-            return ""
-
+    full_path = file_path
     try:
         from tree_sitter import Language, Parser
         import tree_sitter_python as tspython
