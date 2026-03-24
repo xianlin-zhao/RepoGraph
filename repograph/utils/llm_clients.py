@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Literal, Optional
+from typing import Any, Dict, Literal, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,6 +12,9 @@ BackendName = Literal["openai", "ollama", "mock"]
 class LLMClient:
     def generate(self, prompt: str) -> str:
         raise NotImplementedError
+
+    def get_last_usage(self) -> Optional[Dict[str, Any]]:
+        return getattr(self, "last_usage", None)
 
 
 class OpenAICompatibleClient(LLMClient):
@@ -55,6 +58,11 @@ class OpenAICompatibleClient(LLMClient):
                     top_p=self.top_p,
                     max_tokens=self.max_tokens,
                 )
+                usage_obj = getattr(resp, "usage", None)
+                self.last_usage = {
+                    "prompt_tokens": int(getattr(usage_obj, "prompt_tokens", 0) or 0),
+                    "completion_tokens": int(getattr(usage_obj, "completion_tokens", 0) or 0),
+                }
                 content = resp.choices[0].message.content
                 return (content or "")
             except Exception as e:
@@ -100,6 +108,10 @@ class OllamaClient(LLMClient):
                         messages=[{"role": "user", "content": prompt}],
                         options={"temperature": self.temperature, "top_p": self.top_p},
                     )
+                self.last_usage = {
+                    "prompt_tokens": int(resp.get("prompt_eval_count", 0) or 0),
+                    "completion_tokens": int(resp.get("eval_count", 0) or 0),
+                }
                 return (resp.get("message", {}) or {}).get("content", "")
             except Exception as e:
                 last_err = e
@@ -110,6 +122,7 @@ class OllamaClient(LLMClient):
 class MockClient(LLMClient):
     def generate(self, prompt: str) -> str:
         _ = prompt
+        self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         return "pass"
 
 

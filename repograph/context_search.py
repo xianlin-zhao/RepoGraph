@@ -59,6 +59,17 @@ def _similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
+def _estimate_token_count(text: str) -> int:
+    try:
+        import tiktoken
+
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text or ""))
+    except Exception:
+        # Rough fallback to avoid breaking token accounting when tokenizer is unavailable.
+        return max(0, int(len(text or "") / 4))
+
+
 @dataclass(frozen=True)
 class ResolvedNode:
     query: str
@@ -183,7 +194,7 @@ def llm_generate_search_terms(
     requirement_text: str,
     signature: str,
     max_terms: int = 5,
-) -> List[str]:
+) -> Tuple[List[str], Dict[str, int]]:
     prompt = SEARCH_TERMS_PROMPT_TEMPLATE.format(
         max_terms=max_terms,
         requirement_text=requirement_text.strip(),
@@ -191,6 +202,20 @@ def llm_generate_search_terms(
     )
     raw = client.generate(prompt)
     raw = (raw or "").strip()
+    usage_raw = {}
+    if hasattr(client, "get_last_usage"):
+        usage_raw = client.get_last_usage() or {}
+    prompt_tokens = int(usage_raw.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(usage_raw.get("completion_tokens", 0) or 0)
+    if prompt_tokens <= 0:
+        prompt_tokens = _estimate_token_count(prompt)
+    if completion_tokens <= 0:
+        completion_tokens = _estimate_token_count(raw)
+    usage = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+    }
 
     # DEBUG
     print(f"DEBUG: raw: {raw}")
@@ -200,7 +225,7 @@ def llm_generate_search_terms(
         obj = json.loads(raw)
         if isinstance(obj, list):
             terms = [str(x).strip() for x in obj if str(x).strip()]
-            return terms[:max_terms] or []
+            return terms[:max_terms] or [], usage
     except Exception:
         pass
 
@@ -211,7 +236,7 @@ def llm_generate_search_terms(
             obj = json.loads(m.group(0))
             if isinstance(obj, list):
                 terms = [str(x).strip() for x in obj if str(x).strip()]
-                return terms[:max_terms] or []
+                return terms[:max_terms] or [], usage
         except Exception:
             pass
 
@@ -219,7 +244,7 @@ def llm_generate_search_terms(
     lines = [ln.strip(" \t-•") for ln in raw.splitlines() if ln.strip()]
 
 
-    return [ln for ln in lines[:max_terms] if ln]
+    return [ln for ln in lines[:max_terms] if ln], usage
 
 
 def rank_aggregate_one_task(
@@ -337,6 +362,7 @@ def analyze_project(
     processed = 0
     agg = {k: {"pred": 0, "match": 0, "gt": 0} for k in recall_ks}
     tasks_with_dep = 0
+    token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0}
 
     for record in iter_jsonl(filtered_path):
         task: DevEvalTask = parse_task(record)
@@ -348,12 +374,16 @@ def analyze_project(
         print(f"DEBUG: requirement_text: {requirement_text}")
         print(f"DEBUG: signature: {signature}")
 
-        search_terms = llm_generate_search_terms(
+        search_terms, llm_usage = llm_generate_search_terms(
             client,
             requirement_text=requirement_text,
             signature=signature,
             max_terms=max_terms,
         )
+        token_usage["prompt_tokens"] += int(llm_usage.get("prompt_tokens", 0))
+        token_usage["completion_tokens"] += int(llm_usage.get("completion_tokens", 0))
+        token_usage["total_tokens"] += int(llm_usage.get("total_tokens", 0))
+        token_usage["calls"] += 1
         print(f"DEBUG: search_terms: {search_terms}")
         print("=======================================")
         if not search_terms:
@@ -424,6 +454,7 @@ def analyze_project(
             "requirement_text": requirement_text,
             "dependency": task.dependency,
             "search_terms": search_terms,
+            "llm_usage": llm_usage,
             "per_term": agg_info["term_results"],
             "ranked_nodes": ranked_nodes,
             "results": metrics_by_k,
@@ -449,6 +480,7 @@ def analyze_project(
         "output_jsonl": output_jsonl,
         "num_tasks": processed,
         "tasks_with_dependency": tasks_with_dep,
+        "token_usage": token_usage,
         "agg": {},
     }
 
