@@ -19,13 +19,13 @@ from utils.source_code_utils import resolve_signature, read_line_range, get_clas
 from utils.task_recall import compute_task_recall
 
 
-SOURCE_CODE_DIR = "/data/lowcode_public/DevEval_zxl/Source_Code"
+SOURCE_CODE_DIR = "/data/lowcode_public/DevEval_no_targetMehod/Source_Code"
 FILTERED_PATH = "/data/zxl/Search2026/outputData/devEvalSearchOut/0316_batch_workflow/mingus/filtered.jsonl"
-DIAGNOSTIC_JSONL = "/data/zxl/Search2026/outputData/devEvalRepoGraph/mingus/diagnostic_graph_context.jsonl"
-OUTPUT_COMPLETION_PATH = "/data/zxl/Search2026/outputData/devEvalCompletionOut/mingus/0318/repograph_completion.jsonl"
+DIAGNOSTIC_JSONL = "/data/zxl/Search2026/outputData/devEvalRepoGraph/mingus/diagnostic_graph_context_gpt.jsonl"
+OUTPUT_COMPLETION_PATH = "/data/zxl/Search2026/outputData/devEvalCompletionOut/0405_repograph/mingus/repograph_completion.jsonl"
 
 # 代码生成使用的大模型
-MODEL_NAME = "deepseek-v3"
+MODEL_NAME = "gpt-5-mini"
 MODEL_BACKEND_CHOICE = "openai"
 
 DEBUG = True  # 是否打印调试信息到控制台

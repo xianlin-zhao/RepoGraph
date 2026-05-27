@@ -8,21 +8,21 @@ import pandas as pd
 from context_search import MODEL_BACKEND_CHOICE, MODEL_NAME, analyze_project
 
 
-SOURCE_CODE_DIR = "/data/zxl/Search2026/Datasets/cleanEvoCodeBench/Source_Code"
-DEFAULT_EXCEL_PATH = "/data/zxl/Search2026/CodeContextSearch/docs/EvoCodeBench_5projects_clean.xlsx"
+SOURCE_CODE_DIR = "/data/lowcode_public/DevEval_no_targetMehod/Source_Code"
+DEFAULT_EXCEL_PATH = "/data/zxl/Search2026/RepoGraph/docs/0405_5projects_repograph.xlsx"
 
 # Per-project input/output path pattern:
 #   <base_dir>/<project_name>/<file_name>
-DEFAULT_FILTERED_BASE_DIR = "/data/zxl/Search2026/outputData/EvoCodeBenchSearchOut/0330_5projects"
-DEFAULT_GRAPH_BASE_DIR = "/data/zxl/Search2026/outputData/EvoCodeBenchRepoGraph"
-DEFAULT_OUTPUT_BASE_DIR = "/data/zxl/Search2026/outputData/EvoCodeBenchRepoGraph"
+DEFAULT_FILTERED_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalSearchOut/0316_batch_workflow"
+DEFAULT_GRAPH_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalRepoGraph"
+DEFAULT_OUTPUT_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalRepoGraph"
 
 DEFAULT_FILTERED_FILE_NAME = "filtered.jsonl"
 DEFAULT_GRAPH_FILE_NAME = "graph.pkl"
 DEFAULT_TAGS_FILE_NAME = "tags.json"
-DEFAULT_OUTPUT_JSONL_FILE_NAME = "diagnostic_graph_context.jsonl"
+DEFAULT_OUTPUT_JSONL_FILE_NAME = "diagnostic_graph_context_gpt.jsonl"
 
-REPORT_CSV_FILE_NAME = "context_search_report.csv"
+REPORT_CSV_FILE_NAME = "context_search_report_gpt.csv"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

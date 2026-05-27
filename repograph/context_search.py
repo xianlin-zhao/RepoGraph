@@ -27,7 +27,7 @@ TAGS_JSON = "/data/zxl/Search2026/outputData/devEvalRepoGraph/alembic/tags.json"
 OUTPUT_JSONL = "/data/zxl/Search2026/outputData/devEvalRepoGraph/alembic/diagnostic_graph_context.jsonl"
 
 MODEL_BACKEND_CHOICE: BackendName = "openai"
-MODEL_NAME = "deepseek-v3"
+MODEL_NAME = "gpt-5-mini"
 
 
 SEARCH_TERMS_PROMPT_TEMPLATE = """You are helping retrieve relevant code dependencies from a Python repository graph.

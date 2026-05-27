@@ -9,8 +9,8 @@ import pandas as pd
 from construct_graph import CodeGraph
 
 
-DEFAULT_EXCEL_PATH = "/data/zxl/Search2026/CodeContextSearch/docs/EvoCodeBench_5projects_clean.xlsx"
-DEFAULT_OUTPUT_BASE_DIR = "/data/zxl/Search2026/outputData/EvoCodeBenchRepoGraph"
+DEFAULT_EXCEL_PATH = "/data/zxl/Search2026/RepoGraph/docs/0405_5projects_repograph.xlsx"
+DEFAULT_OUTPUT_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalRepoGraph"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

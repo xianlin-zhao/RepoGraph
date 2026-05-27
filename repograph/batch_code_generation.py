@@ -6,17 +6,17 @@ import pandas as pd
 from code_generation import generate_completions
 
 
-SOURCE_CODE_DIR = "/data/lowcode_public/DevEval_zxl/Source_Code"
-DEFAULT_EXCEL_PATH = "/data/zxl/Search2026/RepoGraph/docs/0311_5projects_repograph.xlsx"
+SOURCE_CODE_DIR = "/data/lowcode_public/DevEval_no_targetMehod/Source_Code"
+DEFAULT_EXCEL_PATH = "/data/zxl/Search2026/RepoGraph/docs/0405_5projects_repograph.xlsx"
 
 # Each per-project path is built as:
 #   <base_dir>/<project_name>/<file_name>
 DEFAULT_FILTERED_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalSearchOut/0316_batch_workflow"
 DEFAULT_DIAGNOSTIC_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalRepoGraph"
-DEFAULT_OUTPUT_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalCompletionOut/0318_batch_workflow"
+DEFAULT_OUTPUT_BASE_DIR = "/data/zxl/Search2026/outputData/devEvalCompletionOut/0405_repograph"
 
 DEFAULT_FILTERED_FILE_NAME = "filtered.jsonl"
-DEFAULT_DIAGNOSTIC_FILE_NAME = "diagnostic_graph_context.jsonl"
+DEFAULT_DIAGNOSTIC_FILE_NAME = "diagnostic_graph_context_gpt.jsonl"
 DEFAULT_OUTPUT_FILE_NAME = "repograph_completion.jsonl"
 
 
